@@ -5,11 +5,22 @@ import { GoogleGenAI } from "@google/genai";
 import multer from "multer";
 
 const upload = multer({ storage: multer.memoryStorage() });
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+
+let aiClient: GoogleGenAI | null = null;
+function getAI(): GoogleGenAI {
+  if (!aiClient) {
+    const key = process.env.GEMINI_API_KEY;
+    if (!key) {
+      throw new Error("GEMINI_API_KEY environment variable is required");
+    }
+    aiClient = new GoogleGenAI({ apiKey: key });
+  }
+  return aiClient;
+}
 
 async function startServer() {
   const app = express();
-  const PORT = Number(process.env.PORT) || 3000;
+  const PORT = 3000;
 
   app.use(express.json({ limit: '50mb' }));
   app.use(express.urlencoded({ limit: '50mb', extended: true }));
@@ -27,13 +38,16 @@ async function startServer() {
       const customInstruction = req.body.instruction;
 
       const prompt = customInstruction
-        ? `You are an expert Document Analyst. Please follow the user's specific instruction regarding this document.\nUser Instruction: ${customInstruction}\nIf the instruction asks for an analysis, format the output nicely using Markdown.`
-        : `You are an expert Document Analyst. Please analyze the following document.
-1. Provide a short, direct summary of the main points.
-2. List 3 to 5 clear action items or next steps based on the document's content.
-Return the output in Markdown format.`;
+        ? `You are LegalEaseAI, an expert Document Analyst. Please follow the user's specific instruction regarding this document.\nUser Instruction: ${customInstruction}\nIf the instruction asks for an analysis, format the output nicely using Markdown.`
+        : `You are LegalEaseAI, an expert Document Analyst.
+Your task:
+1. Simplify the provided document.
+2. Do not guess anything or make assumptions.
+3. Highlight all key points. Do not forget or leave any out.
+4. Do not include or guess any information outside the contents of the file.
+Return the output in clear, readable Markdown format.`;
 
-      const response = await ai.models.generateContent({
+      const response = await getAI().models.generateContent({
         model: "gemini-3.5-flash",
         contents: {
           parts: [
@@ -84,7 +98,7 @@ If the information cannot be found in the document, say so.`;
       }
       parts.push({ text: `User asks: ${message}` });
 
-      const response = await ai.models.generateContent({
+      const response = await getAI().models.generateContent({
         model: 'gemini-3.5-flash',
         contents: {
           parts: parts
